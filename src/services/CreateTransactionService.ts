@@ -1,7 +1,8 @@
-import { getRepository } from 'typeorm';
+import { getRepository, getCustomRepository } from 'typeorm';
 import Transaction from '../models/Transaction';
 import Category from '../models/Category';
 import AppError from '../errors/AppError';
+import TransactionsRepository from '../repositories/TransactionsRepository';
 
 interface Request {
   title: string;
@@ -18,10 +19,17 @@ class CreateTransactionService {
     categoryName,
   }: Request): Promise<Transaction> {
     const categoryRepository = getRepository(Category);
-    const transactionRepository = getRepository(Transaction);
+    const transactionRepository = getCustomRepository(TransactionsRepository);
 
     if (type !== 'income' && type !== 'outcome') {
       throw new AppError('Transaction type must be income or outcome!');
+    }
+
+    if (type === 'outcome') {
+      const balance = await transactionRepository.getBalance();
+      if (value > balance.total) {
+        throw new AppError('Total de saída é maior que o valor disponível.');
+      }
     }
 
     const existingCategory = await categoryRepository.findOne({
@@ -40,7 +48,7 @@ class CreateTransactionService {
       title,
       value,
       type,
-      id: category.id,
+      category_id: category.id,
     });
 
     await transactionRepository.save(transaction);
