@@ -1,33 +1,59 @@
 import csvParse from 'csv-parse';
 import fs from 'fs';
 import path from 'path';
-import { getCustomRepository } from 'typeorm';
 import Transaction from '../models/Transaction';
-import TransactionsRepository from '../repositories/TransactionsRepository';
+import CreateTransactionService from './CreateTransactionService';
 
 interface Request {
   filename: string;
 }
 
 class ImportTransactionsService {
-  async execute({ filename }: Request): Promise<void> {
-    const transactionsRepository = getCustomRepository(TransactionsRepository);
+  async execute({ filename }: Request): Promise<Transaction[]> {
+    const createTransaction = new CreateTransactionService();
     const csvFilePath = path.resolve(__dirname, '..', '..', 'tmp', filename);
-    // const data = this.loadCSV(csvFilePath);
+    const lines = await this.loadCSV(csvFilePath);
+
     const transactions: Transaction[] = [];
-    const teste = transactionsRepository.create({
-      title: 'teste',
-      type: 'income',
-      value: 3000,
-      category_id: '1fab423f-cf17-4ff8-9ea3-efa8b298a778',
-    });
-    transactions.push(teste);
-    /* transactions.push(
-      ,
-    ); */
+
+    await Promise.all(
+      lines
+        .filter(lineFilter => {
+          return lineFilter[1] === 'income';
+        })
+        .map(async line => {
+          const addedTransaction = await createTransaction.execute({
+            title: line[0],
+            type: line[1],
+            value: line[2],
+            categoryName: line[3],
+          });
+
+          transactions.push(addedTransaction);
+        }),
+    );
+
+    await Promise.all(
+      lines
+        .filter(lineFilter => {
+          return lineFilter[1] === 'outcome';
+        })
+        .map(async line => {
+          const addedTransaction = await createTransaction.execute({
+            title: line[0],
+            type: line[1],
+            value: line[2],
+            categoryName: line[3],
+          });
+
+          transactions.push(addedTransaction);
+        }),
+    );
+
+    return transactions;
   }
 
-  async loadCSV(filePath: string): any[] {
+  async loadCSV(filePath: string): Promise<any[]> {
     const readCSVStream = fs.createReadStream(filePath);
 
     const parseStream = csvParse({

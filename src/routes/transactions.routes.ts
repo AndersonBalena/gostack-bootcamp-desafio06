@@ -54,7 +54,7 @@ transactionsRouter.post(
 
     const importTransactions = new ImportTransactionsService();
 
-    const transactions = importTransactions.execute({
+    const transactions = await importTransactions.execute({
       filename,
     });
 
