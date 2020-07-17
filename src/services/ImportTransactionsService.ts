@@ -8,52 +8,61 @@ interface Request {
   filename: string;
 }
 
+interface CSVTransactions {
+  title: string;
+  type: 'income' | 'outcome';
+  value: number;
+  category: string;
+}
+
 class ImportTransactionsService {
   async execute({ filename }: Request): Promise<Transaction[]> {
     const createTransaction = new CreateTransactionService();
     const csvFilePath = path.resolve(__dirname, '..', '..', 'tmp', filename);
-    const lines = await this.loadCSV(csvFilePath);
+    const transactions: CSVTransactions[] = await this.loadCSV(csvFilePath);
 
-    const transactions: Transaction[] = [];
+    const newTransactions: Transaction[] = [];
 
     await Promise.all(
-      lines
-        .filter(lineFilter => {
-          return lineFilter[1] === 'income';
+      transactions
+        .filter(transactionsFilter => {
+          return transactionsFilter.type === 'income';
         })
-        .map(async line => {
+        .map(async transaction => {
           const addedTransaction = await createTransaction.execute({
-            title: line[0],
-            type: line[1],
-            value: line[2],
-            categoryName: line[3],
+            title: transaction.title,
+            type: transaction.type,
+            value: transaction.value,
+            categoryName: transaction.category,
           });
 
-          transactions.push(addedTransaction);
+          newTransactions.push(addedTransaction);
         }),
     );
 
     await Promise.all(
-      lines
-        .filter(lineFilter => {
-          return lineFilter[1] === 'outcome';
+      transactions
+        .filter(transactionsFilter => {
+          return transactionsFilter.type === 'outcome';
         })
-        .map(async line => {
+        .map(async transaction => {
           const addedTransaction = await createTransaction.execute({
-            title: line[0],
-            type: line[1],
-            value: line[2],
-            categoryName: line[3],
+            title: transaction.title,
+            type: transaction.type,
+            value: transaction.value,
+            categoryName: transaction.category,
           });
 
-          transactions.push(addedTransaction);
+          newTransactions.push(addedTransaction);
         }),
     );
 
-    return transactions;
+    // await fs.promises.unlink(filename);
+
+    return newTransactions;
   }
 
-  async loadCSV(filePath: string): Promise<any[]> {
+  async loadCSV(filePath: string): Promise<CSVTransactions[]> {
     const readCSVStream = fs.createReadStream(filePath);
 
     const parseStream = csvParse({
@@ -64,17 +73,22 @@ class ImportTransactionsService {
 
     const parseCSV = readCSVStream.pipe(parseStream);
 
-    const lines: any[] = [];
+    const transactions: CSVTransactions[] = [];
 
-    parseCSV.on('data', line => {
-      lines.push(line);
+    parseCSV.on('data', async line => {
+      const [title, type, value, category] = line.map((cell: string) =>
+        cell.trim(),
+      );
+      if (!title || !type || !value) return;
+
+      transactions.push({ title, type, value, category });
     });
 
     await new Promise(resolve => {
       parseCSV.on('end', resolve);
     });
 
-    return lines;
+    return transactions;
   }
 }
 
